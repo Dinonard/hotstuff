@@ -19,6 +19,7 @@ pub struct Block {
     pub tc: Option<TC>,
     pub author: PublicKey,
     pub round: Round,
+    /// TODO: replace current digests with something more Ethereum like? Or is it fine to keep as is?
     pub payload: Vec<Digest>,
     pub signature: Signature,
 }

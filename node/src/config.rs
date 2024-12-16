@@ -78,7 +78,7 @@ impl Default for Secret {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Default, Clone, Serialize, Deserialize)]
 pub struct Committee {
     pub consensus: ConsensusCommittee,
     pub mempool: MempoolCommittee,

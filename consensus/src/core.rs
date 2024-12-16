@@ -1,6 +1,6 @@
 use crate::aggregator::Aggregator;
 use crate::config::Committee;
-use crate::consensus::{ConsensusMessage, Round};
+use crate::consensus::{ConsensusMessage, EngineProxyMessage, Round};
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::leader::LeaderElector;
 use crate::mempool::MempoolDriver;
@@ -35,6 +35,7 @@ pub struct Core {
     rx_loopback: Receiver<Block>,
     tx_proposer: Sender<ProposerMessage>,
     tx_commit: Sender<Block>,
+    tx_engine_proxy: Sender<EngineProxyMessage>,
     round: Round,
     last_voted_round: Round,
     last_committed_round: Round,
@@ -59,6 +60,7 @@ impl Core {
         rx_loopback: Receiver<Block>,
         tx_proposer: Sender<ProposerMessage>,
         tx_commit: Sender<Block>,
+        tx_engine_proxy: Sender<EngineProxyMessage>,
     ) {
         tokio::spawn(async move {
             Self {
@@ -73,6 +75,7 @@ impl Core {
                 rx_loopback,
                 tx_proposer,
                 tx_commit,
+                tx_engine_proxy,
                 round: 1,
                 last_voted_round: 0,
                 last_committed_round: 0,
@@ -326,13 +329,28 @@ impl Core {
         // Store the block only if we have already processed all its ancestors.
         self.store_block(block).await;
 
+        // JOLTEON
+        // Send the block to the execution engine proxy.
+        // TODO: Should we wait for the execution to finish before proceeding?
+        self.tx_engine_proxy
+            .send(EngineProxyMessage::NewPayload(block.clone()))
+            .await
+            .expect("Failed to send message to engine proxy");
+
         self.cleanup_proposer(&b0, &b1, block).await;
 
         // Check if we can commit the head of the 2-chain.
         // Note that we commit blocks only if we have all its ancestors.
         if b0.round + 1 == b1.round {
             self.mempool_driver.cleanup(b0.round).await;
-            self.commit(b0).await?;
+            self.commit(b0.clone()).await?;
+
+            // JOLTEON
+            // Since 'b0' is finalized at this point, inform the execution engine.
+            self.tx_engine_proxy
+                .send(EngineProxyMessage::ForkchoiceUpdated(b0))
+                .await
+                .expect("Failed to send message to engine proxy");
         }
 
         // Ensure the block's round is as expected.

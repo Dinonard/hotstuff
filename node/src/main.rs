@@ -1,163 +1,84 @@
+//! This example shows how to configure custom components for a reth node.
+
+// TODO: revisit this later, get rid of unused imports
+// #![cfg_attr(not(test), warn(unused_crate_dependencies))]
+
+use reth::cli::Cli;
+use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
+
+use tokio::sync::mpsc::{channel, unbounded_channel};
+
 mod config;
-mod node;
+mod consensus_node;
+mod engine_api_proxy;
+mod reth_node_launcher;
 
-use crate::config::Export as _;
-use crate::config::{Committee, Secret};
-use crate::node::Node;
-use clap::{Parser, Subcommand};
-use consensus::Committee as ConsensusCommittee;
-use env_logger::Env;
-use futures::future::join_all;
-use log::error;
-use mempool::Committee as MempoolCommittee;
-use std::fs;
-use tokio::task::JoinHandle;
+use consensus_node::JolteonNode;
+use engine_api_proxy::EngineApiProxy;
+use reth_node_launcher::DefaultNodeLauncher;
 
-#[derive(Parser)]
-#[clap(author, version, about, long_about = None)]
-struct Cli {
-    /// Turn debugging information on.
-    #[clap(short, long, action = clap::ArgAction::Count)]
-    verbose: u8,
-    /// The command to execute.
-    #[clap(subcommand)]
-    command: Command,
-}
+// TODO: get rid of this later
+const DB_PATH: &str = "./db";
 
-#[derive(Subcommand)]
-enum Command {
-    /// Generate a new keypair.
-    Keys {
-        /// The file where to print the new key pair.
-        #[clap(short, long, value_parser, value_name = "FILE")]
-        filename: String,
-    },
-    /// Run a single node.
-    Run {
-        /// The file containing the node keys.
-        #[clap(short, long, value_parser, value_name = "FILE")]
-        keys: String,
-        /// The file containing committee information.
-        #[clap(short, long, value_parser, value_name = "FILE")]
-        committee: String,
-        /// Optional file containing the node parameters.
-        #[clap(short, long, value_parser, value_name = "FILE")]
-        parameters: Option<String>,
-        /// The path where to create the data store.
-        #[clap(short, long, value_parser, value_name = "PATH")]
-        store: String,
-    },
-    /// Deploy a local testbed with the specified number of nodes.
-    Deploy {
-        #[clap(short, long, value_parser = clap::value_parser!(u16).range(4..))]
-        nodes: u16,
-    },
-}
+fn main() {
+    Cli::parse_args()
+        .run(|builder, _| async move {
+            // 0. To be used by the Jolteon consensus part.
+            let (consensus_tx, consensus_rx) = unbounded_channel();
 
-#[tokio::main]
-async fn main() {
-    let cli = Cli::parse();
+            // 1. Build & start the reth node handle
+            let handle = builder
+                // use the default ethereum node types
+                .with_types::<EthereumNode>()
+                // Configure the components of the node
+                // use default ethereum components
+                .with_components(EthereumNode::components())
+                .with_add_ons(EthereumAddOns::default())
+                .launch_with_fn(|builder| {
+                    let launcher = DefaultNodeLauncher::new(
+                        builder.task_executor().clone(),
+                        builder.config().datadir(),
+                        (consensus_tx.clone(), consensus_rx),
+                    );
 
-    let log_level = match cli.verbose {
-        0 => "error",
-        1 => "warn",
-        2 => "info",
-        3 => "debug",
-        _ => "trace",
-    };
-    let mut logger = env_logger::Builder::from_env(Env::default().default_filter_or(log_level));
-    #[cfg(feature = "benchmark")]
-    logger.format_timestamp_millis();
-    logger.init();
-
-    match cli.command {
-        Command::Keys { filename } => {
-            if let Err(e) = Node::print_key_file(&filename) {
-                error!("{}", e);
-            }
-        }
-        Command::Run {
-            keys,
-            committee,
-            parameters,
-            store,
-        } => match Node::new(&committee, &keys, &store, parameters).await {
-            Ok(mut node) => {
-                tokio::spawn(async move {
-                    node.analyze_block().await;
+                    builder.launch_with(launcher)
                 })
+                .await?;
+
+            // 2. Build & start the Jolten consensus node handle
+            let (tx_engine_proxy, rx_engine_proxy) = channel(1000);
+            let consensus_node = JolteonNode::new(&"", &"", DB_PATH, None, tx_engine_proxy)
                 .await
-                .expect("Failed to analyze committed blocks");
-            }
-            Err(e) => error!("{}", e),
-        },
-        Command::Deploy { nodes } => match deploy_testbed(nodes) {
-            Ok(handles) => {
-                let _ = join_all(handles).await;
-            }
-            Err(e) => error!("Failed to deploy testbed: {}", e),
-        },
-    }
-}
+                .map_err(|e| {
+                    log::error!("Failed to create consensus node: {:?}", e);
+                    e
+                })
+                .unwrap();
+            log::info!("Node started");
 
-fn deploy_testbed(nodes: u16) -> Result<Vec<JoinHandle<()>>, Box<dyn std::error::Error>> {
-    let keys: Vec<_> = (0..nodes).map(|_| Secret::new()).collect();
+            // 3. Build & start the Engine API proxy
+            let provider = handle.node.provider.clone();
+            let evm_config = handle.node.evm_config.clone();
+            handle
+                .node
+                .task_executor
+                .spawn_critical("engine API proxy", async move {
+                    EngineApiProxy::new(
+                        provider,
+                        evm_config,
+                        consensus_node.store,
+                        rx_engine_proxy,
+                        consensus_tx,
+                    )
+                    .run()
+                    .await;
+                });
 
-    // Print the committee file.
-    let epoch = 1;
-    let mempool_committee = MempoolCommittee::new(
-        keys.iter()
-            .enumerate()
-            .map(|(i, key)| {
-                let name = key.name;
-                let stake = 1;
-                let front = format!("127.0.0.1:{}", 25_000 + i).parse().unwrap();
-                let mempool = format!("127.0.0.1:{}", 25_100 + i).parse().unwrap();
-                (name, stake, front, mempool)
-            })
-            .collect(),
-        epoch,
-    );
-    let consensus_committee = ConsensusCommittee::new(
-        keys.iter()
-            .enumerate()
-            .map(|(i, key)| {
-                let name = key.name;
-                let stake = 1;
-                let addresses = format!("127.0.0.1:{}", 25_200 + i).parse().unwrap();
-                (name, stake, addresses)
-            })
-            .collect(),
-        epoch,
-    );
-    let committee_file = "committee.json";
-    let _ = fs::remove_file(committee_file);
-    Committee {
-        mempool: mempool_committee,
-        consensus: consensus_committee,
-    }
-    .write(committee_file)?;
+            // TODO: use tx stream to send transactions to the consensus
+            // let _task_executor = handle.node.task_executor.clone();
+            // let _pool = handle.node.pool.clone();
 
-    // Write the key files and spawn all nodes.
-    keys.iter()
-        .enumerate()
-        .map(|(i, keypair)| {
-            let key_file = format!("node_{}.json", i);
-            let _ = fs::remove_file(&key_file);
-            keypair.write(&key_file)?;
-
-            let store_path = format!("db_{}", i);
-            let _ = fs::remove_dir_all(&store_path);
-
-            Ok(tokio::spawn(async move {
-                match Node::new(committee_file, &key_file, &store_path, None).await {
-                    Ok(mut node) => {
-                        // Sink the commit channel.
-                        while node.commit.recv().await.is_some() {}
-                    }
-                    Err(e) => error!("{}", e),
-                }
-            }))
+            handle.wait_for_node_exit().await
         })
-        .collect::<Result<_, Box<dyn std::error::Error>>>()
+        .unwrap();
 }

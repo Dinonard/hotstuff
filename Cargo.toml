@@ -1,2 +1,70 @@
 [workspace]
 members = ["store", "crypto", "network", "mempool", "consensus", "node"]
+
+resolver = "2"
+
+[workspace.dependencies]
+
+# Local dependencies
+crypto = { path = "./crypto" }
+store = { path = "./store" }
+consensus = { path = "./consensus" }
+mempool = { path = "./mempool" }
+network = { path = "./network" }
+
+# Reth Related Dependencies
+
+reth = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-transaction-pool = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-tracing = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-chainspec = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-node-core = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-node-builder = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-node-ethereum = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-beacon-consensus = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-blockchain-tree = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-consensus-debug-client = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-engine-util = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-exex = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-network = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-node-events = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-node-api = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-provider = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-rpc = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-tasks = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-payload-validator = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-engine-primitives = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-rpc-types-compat = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-primitives = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-evm-ethereum = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-ethereum-engine-primitives = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-payload-builder = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-basic-payload-builder = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-evm = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+reth-ethereum-payload-builder = { git = "https://github.com/paradigmxyz/reth.git", rev = "88a9bd72d45e20ee8b5be2590aaaacfbd7a0e20c" }
+
+futures-util = "0.3"
+
+alloy = { version = "0.7.3", default-features = false }
+
+# Other External dependencies
+tokio-util = { version = "0.7.4", features = ["codec"] }
+tokio-stream = "0.1.11"
+log = "0.4.14"
+bytes = "1.0.1"
+bincode = "1.3.1"
+futures = "0.3.14"
+clap = { version = "3.2.17", features = ["derive"] }
+env_logger = "0.9.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.61"
+rand = "0.7.3"
+thiserror = "1.0.24"
+anyhow = "1.0.38"
+rocksdb = "0.19.0"
+tokio = { version = "1.5.0" }
+async-trait = "0.1.50"
+ed25519-dalek = "1.0.1"
+async-recursion = "1.0.0"
+base64 = "0.13.0"
+eyre = "0.6"

@@ -59,6 +59,10 @@ impl Proposer {
     }
 
     async fn make_block(&mut self, round: Round, qc: QC, tc: Option<TC>) {
+        // TODO: check how the block format should be expanded here.
+        // It's probably best to keep the simplest possible solution, but some parallel
+        // with Ethereum needs to be drawn.
+
         // Generate a new block.
         let block = Block::new(
             qc,
@@ -69,6 +73,9 @@ impl Proposer {
             self.signature_service.clone(),
         )
         .await;
+
+        // TODO: execute the block here?
+        // Or perhaps it should only be executed AFTER all of the previous blocks have been executed?
 
         if !block.payload.is_empty() {
             info!("Created {}", block);

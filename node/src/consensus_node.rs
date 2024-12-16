@@ -1,33 +1,35 @@
 use crate::config::Export as _;
 use crate::config::{Committee, ConfigError, Parameters, Secret};
-use consensus::{Block, Consensus};
+use consensus::{Block, Consensus, EngineProxyMessage};
 use crypto::SignatureService;
 use log::info;
 use mempool::Mempool;
 use store::Store;
-use tokio::sync::mpsc::{channel, Receiver};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 /// The default channel capacity for this module.
 pub const CHANNEL_CAPACITY: usize = 1_000;
 
-pub struct Node {
+pub struct JolteonNode {
     pub commit: Receiver<Block>,
+    pub store: Store,
 }
 
-impl Node {
+impl JolteonNode {
     pub async fn new(
         committee_file: &str,
         key_file: &str,
         store_path: &str,
         parameters: Option<String>,
+        engine_proxy_tx: Sender<EngineProxyMessage>,
     ) -> Result<Self, ConfigError> {
         let (tx_commit, rx_commit) = channel(CHANNEL_CAPACITY);
         let (tx_consensus_to_mempool, rx_consensus_to_mempool) = channel(CHANNEL_CAPACITY);
         let (tx_mempool_to_consensus, rx_mempool_to_consensus) = channel(CHANNEL_CAPACITY);
 
         // Read the committee and secret key from file.
-        let committee = Committee::read(committee_file)?;
-        let secret = Secret::read(key_file)?;
+        let committee = Committee::read(committee_file).unwrap_or_default();
+        let secret = Secret::read(key_file).unwrap_or_default();
         let name = secret.name;
         let secret_key = secret.secret;
 
@@ -59,14 +61,18 @@ impl Node {
             committee.consensus,
             parameters.consensus,
             signature_service,
-            store,
+            store.clone(),
             rx_mempool_to_consensus,
             tx_consensus_to_mempool,
             tx_commit,
+            engine_proxy_tx,
         );
 
-        info!("Node {} successfully booted", name);
-        Ok(Self { commit: rx_commit })
+        info!("Jolteon Node {} successfully booted", name);
+        Ok(Self {
+            commit: rx_commit,
+            store,
+        })
     }
 
     pub fn print_key_file(filename: &str) -> Result<(), ConfigError> {

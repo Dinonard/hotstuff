@@ -7,6 +7,7 @@ use crate::mempool::MempoolDriver;
 use crate::messages::{Block, Timeout, Vote, TC};
 use crate::proposer::Proposer;
 use crate::synchronizer::Synchronizer;
+
 use async_trait::async_trait;
 use bytes::Bytes;
 use crypto::{Digest, PublicKey, SignatureService};
@@ -38,6 +39,15 @@ pub enum ConsensusMessage {
     SyncRequest(Digest, PublicKey),
 }
 
+/// The message type for the Eth engine API proxy.
+#[derive(Debug)]
+pub enum EngineProxyMessage {
+    /// A new block has been proposed.
+    NewPayload(Block),
+    /// The block has been finalized.
+    ForkchoiceUpdated(Block),
+}
+
 pub struct Consensus;
 
 impl Consensus {
@@ -51,6 +61,7 @@ impl Consensus {
         rx_mempool: Receiver<Digest>,
         tx_mempool: Sender<ConsensusMempoolMessage>,
         tx_commit: Sender<Block>,
+        tx_engine_proxy: Sender<EngineProxyMessage>,
     ) {
         // NOTE: This log entry is used to compute performance.
         parameters.log();
@@ -107,6 +118,7 @@ impl Consensus {
             rx_loopback,
             tx_proposer,
             tx_commit,
+            tx_engine_proxy,
         );
 
         // Spawn the block proposer.
